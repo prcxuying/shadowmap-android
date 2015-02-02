@@ -16,9 +16,14 @@
 
 package com.opengles.shadow;
 
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.nio.FloatBuffer;
+import java.nio.ShortBuffer;
+
 import com.openglesbook.common.ESShapes;
 import com.openglesbook.common.ESShader;
-import com.openglesbook.common.ESTransform;
+//import com.openglesbook.common.ESTransform;
 
 import javax.microedition.khronos.egl.EGLConfig;
 import javax.microedition.khronos.opengles.GL10;
@@ -45,36 +50,62 @@ public class ShadowRenderer implements GLSurfaceView.Renderer
     //
     public void onSurfaceCreated(GL10 glUnused, EGLConfig config)
     {
-        String vShaderStr = "uniform mat4 u_mvpMatrix;                   \n"
-                + "attribute vec4 a_position;                  \n"
-                + "void main()                                 \n"
-                + "{                                           \n"
-                + "   gl_Position = u_mvpMatrix * a_position;  \n"
-                + "}                                           \n";
+        String vShaderStr = 
+        		"uniform mat4 uMVPMatrix;                   \n"
+                + "uniform mat4 uMVMatrix;                  \n"
+                + "uniform mat3 uNormalMatrix;              \n"
+                + "uniform vec4 vVertexColor;             \n"
+                + "attribute vec3 vVertexNormal;            \n"
+                + "attribute vec4 vPosition;                \n"
+                + "varying vec4 Color;                		\n"
+                + "varying vec4 Position;                	\n"
+                + "varying vec3 Normal;                		\n"
+                + "void main()                              \n"
+                + "{                                        \n"
+                + "   Color = vVertexColor;  				\n"
+                + "   Normal = normalize(uNormalMatrix * vVertexNormal);  \n"
+                + "   Position = uMVMatrix * vPosition;  		\n"
+                + "   gl_Position = uMVPMatrix * vPosition;  	\n"
+                + "}                                            \n";
 
-        String fShaderStr = "precision mediump float;                            \n"
+        String fShaderStr = 
+        		"precision mediump float;                  \n"
+                + "uniform vec4 vLightColor;               \n"
+                + "uniform vec4 vLightPosition;            \n"
+                + "uniform vec4 vShininess;                \n"
+                + "uniform vec4 vStrengh;                  \n"
+                + "uniform vec4 vEyePosition;              \n"
+                + "uniform vec4 vColor;                		\n"
+                + "varying vec4 Color;                		\n"
+                + "varying vec4 Position;               	\n"
+                + "varying vec4 Normal;                		\n"
                 + "void main()                                         \n"
                 + "{                                                   \n"
-                + "  gl_FragColor = vec4( 1.0, 0.0, 0.0, 1.0 );        \n"
+                + "  gl_FragColor = Color; 					       \n"
                 + "}                                                   \n";
 
         // Load the shaders and get a linked program object
         mProgramObject = ESShader.loadProgram(vShaderStr, fShaderStr);
 
         // Get the attribute locations
-        mPositionLoc = GLES20.glGetAttribLocation(mProgramObject, "a_position");
+        mPositionLoc = GLES20.glGetAttribLocation(mProgramObject, "vPosition");
 
         // Get the uniform locations
-        mMVPLoc = GLES20.glGetUniformLocation(mProgramObject, "u_mvpMatrix");
+        mMVPLoc = GLES20.glGetUniformLocation(mProgramObject, "uMVPMatrix");
 
+        // Get the uniform locations
+ //       mColorLoc = GLES20.glGetUniformLocation(mProgramObject, "vColor");
+
+        mColorLoc = GLES20.glGetUniformLocation(mProgramObject, "vVertexColor");
+        
         // Generate the vertex data
         mCube.genCube(1.0f);
 
         // Starting rotation angle for the cube
         mAngle = 45.0f;
 
-        GLES20.glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-        mSquare   = new Square();
+        GLES20.glClearColor(0.0f, 1.0f, 0.0f, 0.0f);
+        mSquare   = new Square(mProgramObject);
     }
 
     private void update()
@@ -85,11 +116,10 @@ public class ShadowRenderer implements GLSurfaceView.Renderer
         long elapsedTime = curTime - mLastTime;
         float deltaTime = elapsedTime / 1000.0f;
         mLastTime = curTime;
-
-        ESTransform frustum = new ESTransform();
-        ESTransform modelview = new ESTransform();
+      
         float aspect;
-
+        float[] rotate = new float[16];
+        
         // Compute a rotation angle based on time to rotate the cube
         mAngle += (deltaTime * 40.0f);
         if (mAngle >= 360.0f)
@@ -98,25 +128,38 @@ public class ShadowRenderer implements GLSurfaceView.Renderer
         // Compute the window aspect ratio
         aspect = (float) mWidth / (float) mHeight;
         
-        // Generate a perspective matrix with a 60 degree FOV
-        frustum.matrixLoadIdentity();
+        // Generate a perspective matrix           
         if(aspect <  1)
-        	frustum.frustum(-aspect,aspect,-1, 1, 1.0f, 20.0f);
+        	Matrix.frustumM(mProjectionMatrix, 0, -aspect,aspect,-1, 1, 1.0f, 20.0f);
         else
-        	frustum.frustum(-1,1,-1/aspect, 1/aspect, 1.0f, 20.0f);
+        	Matrix.frustumM(mProjectionMatrix, 0, -1,1,-1/aspect, 1/aspect, 1.0f, 20.0f);
         
-        // Generate a model view matrix to rotate/translate the cube
-        modelview.matrixLoadIdentity();
-
-        // Translate away from the viewer
-        modelview.translate(1.5f, 0.0f, -5.0f);
-
-        // Rotate the cube
-        modelview.rotate(45, 1.0f, 0.0f, 1.0f);
+        // Generate a view matrix to rotate/translate the cube
+        // Set the camera position (View matrix)
+        Matrix.setLookAtM(mViewMatrix, 0, eyeCoords[0], eyeCoords[1], eyeCoords[2], 
+    			0f, 0f, 0f, 0f, 1.0f, 0.0f);
 
         // Compute the final MVP by multiplying the
         // modevleiw and perspective matrices together
-        mMVPMatrix.matrixMultiply(modelview.get(), frustum.get());
+        // Calculate the projection and view transformation
+        Matrix.multiplyMM(mVPMatrix, 0, mProjectionMatrix, 0, mViewMatrix, 0);
+        
+        
+        // Translate away from the viewer
+//        modelview.translate(1.5f, 0.0f, -5.0f);
+//        Matrix.translateM(scratch, 0, 0, 1.0f, 0.0f);
+        
+        // Rotate the cube
+//        modelview.rotate(45, 1.0f, 0.0f, 1.0f);
+        Matrix.setRotateM(rotate, 0, mAngle, 0, 1.0f, 1.0f);
+
+        // Combine the rotation matrix with the projection and camera view
+        // Note that the mMVPMatrix factor *must be first* in order
+        // for the matrix multiplication product to be correct.
+        Matrix.multiplyMM(mMVPMatrix, 0, mVPMatrix, 0, rotate, 0);
+        
+        
+
     }
 
     ///
@@ -124,18 +167,16 @@ public class ShadowRenderer implements GLSurfaceView.Renderer
     //
     public void onDrawFrame(GL10 glUnused)
     {
-    	
+        // Use the program object
+        GLES20.glUseProgram(mProgramObject);
+        
+    	update();
 		drawFloor();
-        update();
-
         // Set the viewport
         GLES20.glViewport(0, 0, mWidth, mHeight);
 
         // Clear the color buffer
- //       GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
-
-        // Use the program object
-        GLES20.glUseProgram(mProgramObject);
+//        GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
 
         // Load the vertex data
         GLES20.glVertexAttribPointer(mPositionLoc, 3, GLES20.GL_FLOAT, false,
@@ -143,9 +184,12 @@ public class ShadowRenderer implements GLSurfaceView.Renderer
         GLES20.glEnableVertexAttribArray(mPositionLoc);
 
         // Load the MVP matrix
-        GLES20.glUniformMatrix4fv(mMVPLoc, 1, false,
-                mMVPMatrix.getAsFloatBuffer());
+        GLES20.glUniformMatrix4fv(mMVPLoc, 1, false, mMVPMatrix, 0);
 
+        float cubeColor[] = {1.0f, 0.0f, 0.0f, 0,0}; 
+        // Set color for drawing the triangle
+        GLES20.glUniform4fv(mColorLoc, 1, cubeColor, 0);
+        
         // Draw the cube
         GLES20.glDrawElements(GLES20.GL_TRIANGLES, mCube.getNumIndices(),
                 GLES20.GL_UNSIGNED_SHORT, mCube.getIndices());
@@ -154,26 +198,18 @@ public class ShadowRenderer implements GLSurfaceView.Renderer
     private void drawFloor()
     {
         float[] ViewMatrix = new float[16];
-        float[] frustum = new float[16];
         float[] MVPMatrix = new float[16];
-        float aspect;
-        
-        // Compute the window aspect ratio
-        aspect = (float) mWidth / (float) mHeight;
-        if(aspect <  1) 
-        	Matrix.frustumM(frustum, 0, -aspect, aspect, -1, 1, 1, 20);
-        else
-        	Matrix.frustumM(frustum,0,-1,1,-1/aspect, 1/aspect, 1.0f, 20.0f);
-        
-        // Set the camera position (View matrix)
-        Matrix.setLookAtM(ViewMatrix, 0, 0, 0, 3, 0f, 0f, 0f, 0f, 1.0f, 0.0f);
+        float[] scratch = new float[16];
 
+        Matrix.setIdentityM(scratch, 0);
+        
+        Matrix.translateM(scratch, 0, 0, 0.0f, -5.0f);
+        
         // Calculate the projection and view transformation
-        Matrix.multiplyMM(MVPMatrix, 0, frustum, 0, ViewMatrix, 0);
-
-        // Draw square
-        mSquare.draw(MVPMatrix);
+        Matrix.multiplyMM(MVPMatrix, 0, mVPMatrix, 0, scratch, 0);
         
+        // Draw square
+        mSquare.draw(MVPMatrix);        
     }
     
     ///
@@ -194,19 +230,28 @@ public class ShadowRenderer implements GLSurfaceView.Renderer
     // Uniform locations
     private int mMVPLoc;
 
+    // color locations
+    private int mColorLoc;
+
     // Vertex data
     private ESShapes mCube = new ESShapes();
 
+    private Square mSquare;
+    
     // Rotation angle
     private float mAngle;
-
-    // MVP matrix
-    private ESTransform mMVPMatrix = new ESTransform();
 
     // Additional Member variables
     private int mWidth;
     private int mHeight;
     private long mLastTime = 0;
-    
-    private Square mSquare; 
+        
+    float lightCoords[] = { -2.0f,  4.0f, -5.0f }; 
+    float eyeCoords[] = { 1.0f,  2.0f, 5.0f };
+
+    private final float[] mVPMatrix = new float[16];
+    private final float[] mProjectionMatrix = new float[16];
+    private final float[] mViewMatrix = new float[16];
+    private final float[] mMVPMatrix = new float[16];
+    private final float[] mMVMatrix = new float[16];
 }
