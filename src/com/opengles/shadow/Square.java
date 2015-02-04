@@ -28,9 +28,11 @@ import android.opengl.GLES20;
 public class Square {
 
     private final FloatBuffer vertexBuffer;
+    private final FloatBuffer normalBuffer;
     private final ShortBuffer drawListBuffer;
     private final int mProgram;
     private int mPositionHandle;
+    private int mNormalHandle;
     private int mColorHandle;
     private int mMVPMatrixHandle;
 
@@ -45,11 +47,17 @@ public class Square {
  */   
     
     static float squareCoords[] = {
-        -5.0f,  -6.0f,  5.5f,    // top left
-        -5.0f,  -6.0f, -5.5f,    // bottom left
-         5.0f,  -6.0f, -5.5f,    // bottom right
-         5.0f,  -6.0f,  5.5f  }; // top right
+        -2.0f,  0.0f,  2.0f,    // top left
+        -2.0f,  0.0f, -2.0f,    // bottom left
+         2.0f,  0.0f, -2.0f,    // bottom right
+         2.0f,  0.0f,  2.0f  }; // top right
     
+    static float normals[] = {  //y positive direction
+        0.0f,  1.0f, 0.0f,    // top left
+        0.0f,  1.0f, 0.0f,    // bottom left
+        0.0f,  1.0f, 0.0f,    // bottom right
+        0.0f,  1.0f, 0.0f  }; // top right
+
     private final short drawOrder[] = { 0, 1, 2, 0, 2, 3 }; // order to draw vertices
 
     private final int vertexStride = COORDS_PER_VERTEX * 4; // 4 bytes per vertex
@@ -70,9 +78,18 @@ public class Square {
         vertexBuffer.put(squareCoords);
         vertexBuffer.position(0);
 
+        // initialize vertex byte buffer for shape coordinates
+        ByteBuffer nb = ByteBuffer.allocateDirect(
+        // (# of coordinate values * 4 bytes per float)
+                normals.length * 4);
+        nb.order(ByteOrder.nativeOrder());
+        normalBuffer = nb.asFloatBuffer();
+        normalBuffer.put(normals);
+        normalBuffer.position(0);
+
         // initialize byte buffer for the draw list
         ByteBuffer dlb = ByteBuffer.allocateDirect(
-                // (# of coordinate values * 2 bytes per short)
+        // (# of coordinate values * 2 bytes per short)
                 drawOrder.length * 2);
         dlb.order(ByteOrder.nativeOrder());
         drawListBuffer = dlb.asShortBuffer();
@@ -87,8 +104,6 @@ public class Square {
      * this shape.
      */
     public void draw(float[] mvpMatrix) {
-        // Add program to OpenGL environment
-        GLES20.glUseProgram(mProgram);
 
         // get handle to vertex shader's vPosition member
         mPositionHandle = GLES20.glGetAttribLocation(mProgram, "vPosition");
@@ -102,11 +117,26 @@ public class Square {
                 GLES20.GL_FLOAT, false,
                 vertexStride, vertexBuffer);
 
-        // get handle to fragment shader's vColor member
-        mColorHandle = GLES20.glGetUniformLocation(mProgram, "vColor");
+        // get handle to vertex shader's normal member
+        mNormalHandle = GLES20.glGetAttribLocation(mProgram, "vVertexNormal");
 
+        // Enable a handle to the triangle vertices
+        GLES20.glEnableVertexAttribArray(mNormalHandle);
+
+        // Prepare the triangle coordinate data
+        GLES20.glVertexAttribPointer(
+                mNormalHandle, COORDS_PER_VERTEX,
+                GLES20.GL_FLOAT, false,
+                vertexStride, normalBuffer);
+
+        // get handle to fragment shader's vColor member
+        //mColorHandle = GLES20.glGetAttribLocation(mProgram, "vVertexColor");
+        //GLES20.glEnableVertexAttribArray(mColorHandle);
+        //GLES20.glVertexAttrib4fv(mColorHandle, color, 0);
         // Set color for drawing the triangle
+        mColorHandle = GLES20.glGetUniformLocation(mProgram, "vVertexColor");
         GLES20.glUniform4fv(mColorHandle, 1, color, 0);
+
 
         // get handle to shape's transformation matrix
         mMVPMatrixHandle = GLES20.glGetUniformLocation(mProgram, "uMVPMatrix");
@@ -123,6 +153,7 @@ public class Square {
 
         // Disable vertex array
         GLES20.glDisableVertexAttribArray(mPositionHandle);
+        //GLES20.glDisableVertexAttribArray(mColorHandle);
+        GLES20.glDisableVertexAttribArray(mNormalHandle);
     }
-
 }
