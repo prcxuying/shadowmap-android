@@ -46,7 +46,7 @@ public class ESShapes {
 				int vertex = (i * (numSlices + 1) + j) * 3;
 
 				mVertices
-						.put(vertex + 0,
+						.put(vertex + 2,
 								(float) (radius
 										* Math.sin(angleStep * (float) i) * Math
 										.sin(angleStep * (float) j)));
@@ -54,7 +54,7 @@ public class ESShapes {
 				mVertices.put(vertex + 1,
 						(float) (radius * Math.cos(angleStep * (float) i)));
 				mVertices
-						.put(vertex + 2,
+						.put(vertex + 0,
 								(float) (radius
 										* Math.sin(angleStep * (float) i) * Math
 										.cos(angleStep * (float) j)));
