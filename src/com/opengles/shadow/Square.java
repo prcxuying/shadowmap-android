@@ -58,7 +58,7 @@ public class Square {
         0.0f,  1.0f, 0.0f,    // bottom right
         0.0f,  1.0f, 0.0f  }; // top right
 
-    private final short drawOrder[] = { 0, 1, 2, 0, 2, 3 }; // order to draw vertices
+    private final short drawOrder[] = { 2, 1, 0, 3, 2, 0 }; // order to draw vertices, CCW
 
     private final int vertexStride = COORDS_PER_VERTEX * 4; // 4 bytes per vertex
 
