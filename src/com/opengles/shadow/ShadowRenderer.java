@@ -73,13 +73,15 @@ public class ShadowRenderer implements GLSurfaceView.Renderer
                 + "uniform vec3 vEyePosition;              \n"
                 + "varying vec4 v_Position;               	\n"
                 + "varying vec3 v_Normal;                		\n"
+                + "uniform sampler2D s_lightMap;                       \n"
                 + "void main()                                         \n"
                 + "{                                                   \n"
                 + "  vec3 lightDirection = vLightPosition - vec3(v_Position);  \n"
                 + "  float lightDistance = length(lightDirection); 		      \n"
-                + "  if (lightDistance < 1.5) 		      \n"
+                + "  lightDirection = lightDirection / lightDistance;  \n"
+                + "  if (lightDistance < 1.0) 		      \n"
                 + "  {                   					\n"
-                + "  	gl_FragColor = vec4(lightDistance,0,0,0);			\n"
+                + "  	gl_FragColor = vec4(1.0, 0.0, 0.0, 0.0);			\n"
                 + "  	return;								\n"
                 + "  }                                      \n"
                 + "  float attenuation = 1.0 / (1.0 + 0.5 * lightDistance + 0.25 * lightDistance * lightDistance);  \n"
@@ -87,13 +89,13 @@ public class ShadowRenderer implements GLSurfaceView.Renderer
                 + "  float diffuse = max(0.0, dot(v_Normal, lightDirection));  \n"
                 + "  float specular = max(0.0, dot(v_Normal, halfVector));  \n"
                 + "  if (diffuse > 0.0)  									\n"
-                + "  	specular = pow(specular, 2.0)*1.0;  				\n"
+                + "  	specular = pow(specular, 2.0)*8.0;  				\n"
                 + "  else  													\n"
                 + "  	specular = 0.0;  									\n"
-                + "  vec3 scatteredLight = vec3(0.3) + vec3(vLightColor) * diffuse * attenuation;  \n"
-        //        + "  vec3 reflectedLight = vec3(vLightColor) * specular * attenuation;  \n"
-        //        + "  vec3 rgb = min(vVertexColor.rgb * scatteredLight + reflectedLight, vec3(1.0));  \n"
-                + "  vec3 rgb = min(vVertexColor.rgb * scatteredLight, vec3(1.0));  \n"
+                + "  vec3 scatteredLight = vec3(0.3) + vec3(vLightColor) * diffuse * attenuation ;  \n"
+                + "  vec3 reflectedLight = vec3(vLightColor) * specular * attenuation;  \n"
+                + "  vec3 rgb = min(vVertexColor.rgb * scatteredLight + reflectedLight, vec3(1.0));  \n"
+ //               + "  vec3 rgb = min(vVertexColor.rgb * scatteredLight, vec3(1.0));  \n"
                 + "  gl_FragColor = vec4(rgb, vVertexColor.a); 					       \n"
                 + "}                                                   \n";
 
@@ -115,9 +117,12 @@ public class ShadowRenderer implements GLSurfaceView.Renderer
         mLightPositionLocation  = GLES20.glGetUniformLocation(mProgramObject, "vLightPosition");
         mEyePositionLocation  = GLES20.glGetUniformLocation(mProgramObject, "vEyePosition");
 
+        // Get the sampler locations
+        mLightMapLocation = GLES20.glGetUniformLocation ( mProgramObject, "s_lightMap" );
+
         // Generate the vertex data
         mCube.genCube(2.0f);
-        mSphere.genSphere(12, 1.1f);
+        mSphere.genSphere(12, 0.1f);
         // Starting rotation angle for the cube
         mAngle = 45.0f;
 
@@ -147,19 +152,23 @@ public class ShadowRenderer implements GLSurfaceView.Renderer
     public void onDrawFrame(GL10 glUnused)
     {
         // Clear the color buffer
-        GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
+        GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT|GLES20.GL_DEPTH_BUFFER_BIT);
 
         update();
+        prepareDrawDepthBuffer();
+        drawFloor(mLightViewMatrix, mLightProjectionMatrix);
+        drawCube(mLightViewMatrix, mLightProjectionMatrix);
+//        drawLightSource(mViewMatrix, mProjectionMatrix);
+        drawDepthBuffer();
 
-        drawFloor();
-
-        drawLightSource();
-
-        drawCube();
+        GLES20.glClear(GLES20.GL_DEPTH_BUFFER_BIT);
+        drawFloor(mViewMatrix, mProjectionMatrix);
+        drawCube(mViewMatrix, mProjectionMatrix);
+        drawLightSource(mViewMatrix, mProjectionMatrix);
 
     }
 
-    private void drawCube()
+    private void drawCube(float[] viewMatrix, float[] projectionMatrix)
     {
         // Rotate the cube
         float[] rotate = new float[16];
@@ -168,11 +177,13 @@ public class ShadowRenderer implements GLSurfaceView.Renderer
         // Combine the rotation matrix with the projection and camera view
         // Note that the mMVPMatrix factor *must be first* in order
         // for the matrix multiplication product to be correct.
+        float[] VPMatrix = new float[16];
         float[] MVPMatrix = new float[16];
-        Matrix.multiplyMM(MVPMatrix, 0, mVPMatrix, 0, rotate, 0);
+        Matrix.multiplyMM(VPMatrix, 0, projectionMatrix, 0, viewMatrix, 0);
+        Matrix.multiplyMM(MVPMatrix, 0, VPMatrix, 0, rotate, 0);
 
         float[] MVMatrix = new float[16];
-        Matrix.multiplyMM(MVMatrix, 0, mViewMatrix, 0, rotate, 0);
+        Matrix.multiplyMM(MVMatrix, 0, viewMatrix, 0, rotate, 0);
         GLES20.glUniformMatrix4fv(mMVLoc, 1, false, MVMatrix, 0);
 
         float[] NormalMatrix = new float[16];
@@ -212,21 +223,22 @@ public class ShadowRenderer implements GLSurfaceView.Renderer
           //GLES20.glDisableVertexAttribArray(mColorLoc);
     }
 
-    private void drawLightSource()
+    private void drawLightSource(float[] viewMatrix, float[] projectionMatrix)
     {
         float[] MVPMatrix = new float[16];
         float[] model = new float[16];
         float[] MVMatrix = new float[16];
         float[] NormalMatrix = new float[16];
+        float[] VPMatrix = new float[16];
 
         Matrix.setIdentityM(model, 0);
-
         Matrix.translateM(model, 0, lightCoords[0], lightCoords[1], lightCoords[2]);
 
+        Matrix.multiplyMM(VPMatrix, 0, projectionMatrix, 0, viewMatrix, 0);
         // Calculate the projection and view transformation
-        Matrix.multiplyMM(MVPMatrix, 0, mVPMatrix, 0, model, 0);
+        Matrix.multiplyMM(MVPMatrix, 0, VPMatrix, 0, model, 0);
 
-        Matrix.multiplyMM(MVMatrix, 0, mViewMatrix, 0, model, 0);
+        Matrix.multiplyMM(MVMatrix, 0, viewMatrix, 0, model, 0);
         GLES20.glUniformMatrix4fv(mMVLoc, 1, false, MVMatrix, 0);
 
         float[] inverse = new float[16];
@@ -262,20 +274,22 @@ public class ShadowRenderer implements GLSurfaceView.Renderer
         GLES20.glDisableVertexAttribArray(mNormalLoc);
     }
 
-    private void drawFloor()
+    private void drawFloor(float[] viewMatrix, float[] projectionMatrix)
     {
         float[] MVPMatrix = new float[16];
         float[] model = new float[16];
         float[] MVMatrix = new float[16];
+        float[] VPMatrix = new float[16];
 
         Matrix.setIdentityM(model, 0);
-
+        Matrix.scaleM(model, 0, 2f, 1f, 2f);
         Matrix.translateM(model, 0, 0, -2.0f, 0.0f);
 
         // Calculate the projection and view transformation
-        Matrix.multiplyMM(MVPMatrix, 0, mVPMatrix, 0, model, 0);
+        Matrix.multiplyMM(VPMatrix, 0, projectionMatrix, 0, viewMatrix, 0);
+        Matrix.multiplyMM(MVPMatrix, 0, VPMatrix, 0, model, 0);
 
-        Matrix.multiplyMM(MVMatrix, 0, mViewMatrix, 0, model, 0);
+        Matrix.multiplyMM(MVMatrix, 0, viewMatrix, 0, model, 0);
         GLES20.glUniformMatrix4fv(mMVLoc, 1, false, MVMatrix, 0);
 
         float[] NormalMatrix = new float[16];
@@ -287,7 +301,25 @@ public class ShadowRenderer implements GLSurfaceView.Renderer
         // Draw square
         mSquare.draw(MVPMatrix);        
     }
-    
+
+    private void prepareDrawDepthBuffer()
+    {
+        GLES20.glColorMask(false, false, false, false);
+        //Depth states
+        GLES20.glClearDepthf(1.0f);
+        GLES20.glDepthFunc(GLES20.GL_LEQUAL);
+        GLES20.glEnable(GLES20.GL_DEPTH_TEST);
+    }
+
+    private void drawDepthBuffer()
+    {
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, mShadowMapTexture[0]);
+        GLES20.glCopyTexSubImage2D(GLES20.GL_TEXTURE_2D, 0, 0, 0, 0, 0, mWidth, mHeight);
+        GLES20.glColorMask(true, true, true, true);
+        // Set the light map sampler to texture unit 0
+        GLES20.glUniform1i ( mLightMapLocation, 1 );
+    }
+
     ///
     // Handle surface changes
     //
@@ -295,6 +327,10 @@ public class ShadowRenderer implements GLSurfaceView.Renderer
     {
         mWidth = width;
         mHeight = height;
+        byte[] buffer = new byte[mWidth *mHeight * 4];
+
+        ByteBuffer byteBuffer = ByteBuffer.allocateDirect(mWidth *mHeight * 4);
+        byteBuffer.put(buffer).position(0);
 
         // Use the program object
         GLES20.glUseProgram(mProgramObject);
@@ -302,8 +338,21 @@ public class ShadowRenderer implements GLSurfaceView.Renderer
         GLES20.glFrontFace(GLES20.GL_CCW);
         GLES20.glCullFace(GLES20.GL_BACK);
         GLES20.glEnable(GLES20.GL_CULL_FACE);
+
+        GLES20.glEnable(GLES20.GL_DEPTH_TEST);
+
         // Set the viewport
         GLES20.glViewport(0, 0, mWidth, mHeight);
+
+        GLES20.glDeleteTextures(1, mShadowMapTexture, 0);
+        GLES20.glGenTextures(1, mShadowMapTexture, 0);
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, mShadowMapTexture[0]);
+        GLES20.glTexImage2D( GLES20.GL_TEXTURE_2D, 0, GLES20.GL_DEPTH_COMPONENT, mWidth, mHeight, 0,
+        		GLES20.GL_DEPTH_COMPONENT, GLES20.GL_UNSIGNED_BYTE, byteBuffer);
+        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_NEAREST);
+        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_NEAREST);
+        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_REPEAT);
+        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_REPEAT);
 
         // Compute the window aspect ratio
         float aspect = (float) mWidth / (float) mHeight;
@@ -314,9 +363,18 @@ public class ShadowRenderer implements GLSurfaceView.Renderer
         else
             Matrix.frustumM(mProjectionMatrix, 0, -1,1,-1/aspect, 1/aspect, 1.0f, 10.0f);
 
-        // Generate a view matrix to rotate/translate the cube
         // Set the camera position (View matrix)
         Matrix.setLookAtM(mViewMatrix, 0, eyeCoords[0], eyeCoords[1], eyeCoords[2],
+                0f, 0f, 0f, 0f, 1.0f, 0.0f);
+
+        // Generate a perspective matrix
+        if(aspect <  1)
+            Matrix.frustumM(mLightProjectionMatrix, 0, -aspect,aspect,-1, 1, 1.0f, 10.0f);
+        else
+            Matrix.frustumM(mLightProjectionMatrix, 0, -1,1,-1/aspect, 1/aspect, 1.0f, 10.0f);
+
+                // Set the camera position (View matrix)
+        Matrix.setLookAtM(mLightViewMatrix, 0, lightCoords[0], lightCoords[1], lightCoords[2],
                 0f, 0f, 0f, 0f, 1.0f, 0.0f);
 
         // Compute the final MVP by multiplying the
@@ -346,6 +404,7 @@ public class ShadowRenderer implements GLSurfaceView.Renderer
     private int mLightColorLocation;
     private int mLightPositionLocation;
     private int mEyePositionLocation;
+    private int mLightMapLocation;
 
     // Vertex data
     private ESShapes mCube = new ESShapes();
@@ -356,16 +415,20 @@ public class ShadowRenderer implements GLSurfaceView.Renderer
     // Rotation angle
     private float mAngle;
 
+    private int[] mShadowMapTexture = new int[1];
+
     // Additional Member variables
     private int mWidth;
     private int mHeight;
     private long mLastTime = 0;
 
     float lightColor[] = { 1.0f,  1.0f, 1.0f, 1.0f};
-    float lightCoords[] = { -0.0f,  3.0f, 0.0f };
-    float eyeCoords[] = { 0.0f,  0.0f, 5.0f };
+    float lightCoords[] = { 3.0f,  4.0f, -3.0f };
+    float eyeCoords[] = { 0.0f,  5.0f, 5.0f };
 
     private final float[] mVPMatrix = new float[16];
     private final float[] mProjectionMatrix = new float[16];
     private final float[] mViewMatrix = new float[16];
+    private final float[] mLightProjectionMatrix = new float[16];
+    private final float[] mLightViewMatrix = new float[16];
 }
