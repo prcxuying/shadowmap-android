@@ -106,7 +106,7 @@ public class Square {
     public void draw(float[] mvpMatrix) {
 
         // get handle to vertex shader's vPosition member
-        mPositionHandle = GLES20.glGetAttribLocation(mProgram, "vPosition");
+        mPositionHandle = GLES20.glGetAttribLocation(mProgram, "aPosition");
 
         // Enable a handle to the triangle vertices
         GLES20.glEnableVertexAttribArray(mPositionHandle);
@@ -118,7 +118,7 @@ public class Square {
                 vertexStride, vertexBuffer);
 
         // get handle to vertex shader's normal member
-        mNormalHandle = GLES20.glGetAttribLocation(mProgram, "vVertexNormal");
+        mNormalHandle = GLES20.glGetAttribLocation(mProgram, "aVertexNormal");
 
         // Enable a handle to the triangle vertices
         GLES20.glEnableVertexAttribArray(mNormalHandle);
@@ -134,7 +134,7 @@ public class Square {
         //GLES20.glEnableVertexAttribArray(mColorHandle);
         //GLES20.glVertexAttrib4fv(mColorHandle, color, 0);
         // Set color for drawing the triangle
-        mColorHandle = GLES20.glGetUniformLocation(mProgram, "vVertexColor");
+        mColorHandle = GLES20.glGetUniformLocation(mProgram, "uVertexColor");
         GLES20.glUniform4fv(mColorHandle, 1, color, 0);
 
 

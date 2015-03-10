@@ -53,72 +53,70 @@ public class ShadowRenderer implements GLSurfaceView.Renderer
         String vShaderStr = 
         		"uniform mat4 uMVPMatrix;                   \n"
                 + "uniform mat4 uMVMatrix;                  \n"
+                + "uniform mat4 uVMatrix;                   \n"
                 + "uniform mat4 uNormalMatrix;              \n"
-                + "attribute vec4 vPosition;                \n"
-                + "attribute vec3 vVertexNormal;            \n"
-                + "varying vec4 v_Position;                	\n"
-                + "varying vec3 v_Normal;                		\n"
+                + "attribute vec4 aPosition;                \n"
+                + "attribute vec3 aVertexNormal;            \n"
+                + "varying vec4 vPosition;                	\n"
+                + "varying vec3 vNormal;                		\n"
                 + "void main()                              \n"
                 + "{                                        \n"
-                + "   gl_Position = uMVPMatrix * vPosition;  	\n"
-                + "   v_Normal = normalize(mat3(uNormalMatrix) * vVertexNormal);  \n"
-                + "   v_Position = uMVMatrix * vPosition;  		\n"
+                + "   gl_Position = uMVPMatrix * aPosition;  	\n"
+                + "   vNormal = normalize(mat3(uNormalMatrix) * aVertexNormal);  \n"
+                + "   vPosition = uMVMatrix * aPosition;  		\n"
                 + "}                                            \n";
 
         String fShaderStr = 
         		"precision mediump float;                  \n"
-                + "uniform vec4 vVertexColor;             \n"
-                + "uniform vec4 vLightColor;               \n"
-                + "uniform vec3 vLightPosition;            \n"
-                + "uniform vec3 vEyePosition;              \n"
-                + "varying vec4 v_Position;               	\n"
-                + "varying vec3 v_Normal;                		\n"
-                + "uniform sampler2D s_lightMap;                       \n"
+                + "uniform vec4 uVertexColor;             \n"
+                + "uniform vec4 uLightColor;               \n"
+                + "uniform vec3 uLightPosition;            \n"
+                + "uniform vec3 uEyePosition;              \n"
+                + "uniform mat4 uVMatrix;                  \n"
+                + "varying vec4 vPosition;               	\n"
+                + "varying vec3 vNormal;                		\n"
+                + "uniform sampler2D uLightMap;                       \n"
                 + "void main()                                         \n"
                 + "{                                                   \n"
-                + "  vec3 lightDirection = vLightPosition - vec3(v_Position);  \n"
+                + "  vec3 lightDirection = vec3(uVMatrix*vec4(uLightPosition,1) - vPosition);  \n"
                 + "  float lightDistance = length(lightDirection); 		      \n"
                 + "  lightDirection = lightDirection / lightDistance;  \n"
-                + "  if (lightDistance < 1.0) 		      \n"
-                + "  {                   					\n"
-                + "  	gl_FragColor = vec4(1.0, 0.0, 0.0, 0.0);			\n"
-                + "  	return;								\n"
-                + "  }                                      \n"
                 + "  float attenuation = 1.0 / (1.0 + 0.5 * lightDistance + 0.25 * lightDistance * lightDistance);  \n"
-                + "  vec3 halfVector = normalize(lightDirection + vEyePosition);  \n"
-                + "  float diffuse = max(0.0, dot(v_Normal, lightDirection));  \n"
-                + "  float specular = max(0.0, dot(v_Normal, halfVector));  \n"
+                + "  vec3 halfVector = normalize(lightDirection + uEyePosition);  \n"
+                + "  float diffuse = max(0.0, dot(vNormal, lightDirection));  \n"
+                + "  float specular = max(0.0, dot(vNormal, halfVector));  \n"
                 + "  if (diffuse > 0.0)  									\n"
                 + "  	specular = pow(specular, 2.0)*8.0;  				\n"
                 + "  else  													\n"
                 + "  	specular = 0.0;  									\n"
-                + "  vec3 scatteredLight = vec3(0.3) + vec3(vLightColor) * diffuse * attenuation ;  \n"
-                + "  vec3 reflectedLight = vec3(vLightColor) * specular * attenuation;  \n"
-                + "  vec3 rgb = min(vVertexColor.rgb * scatteredLight + reflectedLight, vec3(1.0));  \n"
- //               + "  vec3 rgb = min(vVertexColor.rgb * scatteredLight, vec3(1.0));  \n"
-                + "  gl_FragColor = vec4(rgb, vVertexColor.a); 					       \n"
+                + "  vec3 scatteredLight = vec3(0.3) + vec3(uLightColor) * diffuse * attenuation ;  \n"
+                + "  vec3 reflectedLight = vec3(uLightColor) * specular * attenuation;  \n"
+                + "  vec3 rgb = min(uVertexColor.rgb * scatteredLight + reflectedLight, vec3(1.0));  \n"
+ //               + "  vec3 rgb = min(uVertexColor.rgb * scatteredLight, vec3(1.0));  \n"
+                + "  gl_FragColor = vec4(rgb, uVertexColor.a); 					       \n"
                 + "}                                                   \n";
 
         // Load the shaders and get a linked program object
         mProgramObject = ESShader.loadProgram(vShaderStr, fShaderStr);
 
         // Get the attribute locations
-        mPositionLoc = GLES20.glGetAttribLocation(mProgramObject, "vPosition");
-        mNormalLoc = GLES20.glGetAttribLocation(mProgramObject, "vVertexNormal");
-        mColorLoc = GLES20.glGetUniformLocation(mProgramObject, "vVertexColor");
-        //mColorLoc = GLES20.glGetAttribLocation(mProgramObject, "vVertexColor");
+        mPositionLoc = GLES20.glGetAttribLocation(mProgramObject, "aPosition");
+        mNormalLoc = GLES20.glGetAttribLocation(mProgramObject, "aVertexNormal");
+        mColorLoc = GLES20.glGetUniformLocation(mProgramObject, "uVertexColor");
+        //mColorLoc = GLES20.glGetAttribLocation(mProgramObject, "uVertexColor");
 
         // Get the uniform locations
         mMVPLoc = GLES20.glGetUniformLocation(mProgramObject, "uMVPMatrix");
         mMVLoc = GLES20.glGetUniformLocation(mProgramObject, "uMVMatrix");
-        mNormalMaxtrixLoc = GLES20.glGetUniformLocation(mProgramObject, "uNormalMatrix");
+        mNormalMatrixLoc = GLES20.glGetUniformLocation(mProgramObject, "uNormalMatrix");
+        mVLoc = GLES20.glGetUniformLocation(mProgramObject, "uVMatrix");
 
-        mLightColorLocation  = GLES20.glGetUniformLocation(mProgramObject, "vLightColor");
-        mLightPositionLocation  = GLES20.glGetUniformLocation(mProgramObject, "vLightPosition");
-        mEyePositionLocation  = GLES20.glGetUniformLocation(mProgramObject, "vEyePosition");
+        mLightColorLocation  = GLES20.glGetUniformLocation(mProgramObject, "uLightColor");
+        mLightPositionLocation  = GLES20.glGetUniformLocation(mProgramObject, "uLightPosition");
+        mEyePositionLocation  = GLES20.glGetUniformLocation(mProgramObject, "uEyePosition");
 
         // Get the sampler locations
-        mLightMapLocation = GLES20.glGetUniformLocation ( mProgramObject, "s_lightMap" );
+        mLightMapLocation = GLES20.glGetUniformLocation ( mProgramObject, "uLightMap" );
 
         // Generate the vertex data
         mCube.genCube(2.0f);
@@ -185,12 +183,13 @@ public class ShadowRenderer implements GLSurfaceView.Renderer
         float[] MVMatrix = new float[16];
         Matrix.multiplyMM(MVMatrix, 0, viewMatrix, 0, rotate, 0);
         GLES20.glUniformMatrix4fv(mMVLoc, 1, false, MVMatrix, 0);
+        GLES20.glUniformMatrix4fv(mVLoc, 1, false, viewMatrix, 0);
 
         float[] NormalMatrix = new float[16];
         float[] inverse = new float[16];
         Matrix.invertM(inverse, 0, MVMatrix, 0);
         Matrix.transposeM(NormalMatrix, 0, inverse, 0);
-        GLES20.glUniformMatrix4fv(mNormalMaxtrixLoc, 1, false, NormalMatrix, 0);
+        GLES20.glUniformMatrix4fv(mNormalMatrixLoc, 1, false, NormalMatrix, 0);
 
           // Load the vertex data
           GLES20.glVertexAttribPointer(mPositionLoc, 3, GLES20.GL_FLOAT, false,
@@ -240,11 +239,12 @@ public class ShadowRenderer implements GLSurfaceView.Renderer
 
         Matrix.multiplyMM(MVMatrix, 0, viewMatrix, 0, model, 0);
         GLES20.glUniformMatrix4fv(mMVLoc, 1, false, MVMatrix, 0);
+        GLES20.glUniformMatrix4fv(mVLoc, 1, false, viewMatrix, 0);
 
         float[] inverse = new float[16];
         Matrix.invertM(inverse, 0, MVMatrix, 0);
         Matrix.transposeM(NormalMatrix, 0, inverse, 0);
-        GLES20.glUniformMatrix4fv(mNormalMaxtrixLoc, 1, false, NormalMatrix, 0);
+        GLES20.glUniformMatrix4fv(mNormalMatrixLoc, 1, false, NormalMatrix, 0);
 
         // Load the vertex data
         GLES20.glVertexAttribPointer(mPositionLoc, 3, GLES20.GL_FLOAT, false,
@@ -291,12 +291,13 @@ public class ShadowRenderer implements GLSurfaceView.Renderer
 
         Matrix.multiplyMM(MVMatrix, 0, viewMatrix, 0, model, 0);
         GLES20.glUniformMatrix4fv(mMVLoc, 1, false, MVMatrix, 0);
+        GLES20.glUniformMatrix4fv(mVLoc, 1, false, viewMatrix, 0);
 
         float[] NormalMatrix = new float[16];
         float[] inverse = new float[16];
         Matrix.invertM(inverse, 0, MVMatrix, 0);
         Matrix.transposeM(NormalMatrix, 0, inverse, 0);
-        GLES20.glUniformMatrix4fv(mNormalMaxtrixLoc, 1, false, NormalMatrix, 0);
+        GLES20.glUniformMatrix4fv(mNormalMatrixLoc, 1, false, NormalMatrix, 0);
 
         // Draw square
         mSquare.draw(MVPMatrix);        
@@ -385,6 +386,7 @@ public class ShadowRenderer implements GLSurfaceView.Renderer
         GLES20.glUniform4fv(mLightColorLocation, 1, lightColor, 0);
         GLES20.glUniform3fv(mLightPositionLocation, 1, lightCoords, 0);
         GLES20.glUniform3fv(mEyePositionLocation, 1, eyeCoords, 0);
+
     }
 
     // Handle to a program object
@@ -397,7 +399,8 @@ public class ShadowRenderer implements GLSurfaceView.Renderer
     // Uniform locations
     private int mMVPLoc;
     private int mMVLoc;
-    private int mNormalMaxtrixLoc;
+    private int mNormalMatrixLoc;
+    private int mVLoc;
 
     // color locations
     private int mColorLoc;
@@ -431,4 +434,5 @@ public class ShadowRenderer implements GLSurfaceView.Renderer
     private final float[] mViewMatrix = new float[16];
     private final float[] mLightProjectionMatrix = new float[16];
     private final float[] mLightViewMatrix = new float[16];
+    private final float[] mShadowmapBiasMatrix = new float[16];
 }
