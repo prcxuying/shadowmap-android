@@ -108,11 +108,11 @@ public class ShadowRenderer implements GLSurfaceView.Renderer
 				+ "  vec4 texCoord = shadowCoord / shadowCoord.w;				\n"
                 + "  vec4 depthColor = texture2D(uLightMap, vec2(uBiasMatrix*texCoord));  \n"
                 + "  float depth =  depthColor.r + depthColor.g/256.0  + depthColor.b /(256.0*256.0) + depthColor.a/(256.0*256.0*256.0); \n"
-                + "  if ( vProjectPosition.z/vProjectPosition.w > depth && depth > 0.01)  \n"
+                + "  if ( shadowCoord.z / shadowCoord.w > depth && depth > 0.01)  \n"
                 + "     isUnShadowed = 0.0;  \n"
                 + "  vec3 rgb = min(ambientLight + isUnShadowed*(scatteredLight + reflectedLight), vec3(1.0));  \n"
                + "  gl_FragColor = vec4(rgb, uVertexColor.a); 					       \n"
-//                + "  depth = vProjectPosition.z/vProjectPosition.w;	\n"
+//                + "  depth = shadowCoord.z / shadowCoord.w;	\n"
 //                + "  gl_FragColor = vec4(0.0 + depth, 0.0+depth, 0.0+depth, 0.0+depth);	\n"
 //              + "  gl_FragColor = depthColor;	\n"
                 + "}                                                   \n";
